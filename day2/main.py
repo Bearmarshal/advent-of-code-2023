@@ -6,13 +6,13 @@ import sys
 
 def part1(filename):
 	num_cubes = {"red": 12, "green": 13, "blue": 14}
-	id_sum = 0
 	game_regex = re.compile(r"Game (?P<id>\d+)")
 	colour_regex = re.compile(r"(\d+) (red|green|blue)")
 
 	with io.open(filename, mode = 'r') as infile:
 		indata = [line.strip() for line in infile]
 
+	id_sum = 0
 	for line in indata:
 		prefix, draws = line.split(": ")
 		possible = True
@@ -26,15 +26,14 @@ def part1(filename):
 	print(f"Part 1: {id_sum}")
 
 def part2(filename):
-	power_sum = 0
-	game_regex = re.compile(r"Game (?P<id>\d+)")
 	colour_regex = re.compile(r"(\d+) (red|green|blue)")
 
 	with io.open(filename, mode = 'r') as infile:
 		indata = [line.strip() for line in infile]
 
+	power_sum = 0
 	for line in indata:
-		prefix, draws = line.split(": ")
+		_, draws = line.split(": ")
 		min_cubes = {"red": 0, "green": 0, "blue": 0}
 		for draw in draws.split("; "):
 			for number, colour in colour_regex.findall(draw):
