@@ -8,26 +8,45 @@ import re
 import sys
 
 class Direction(tuple, enum.Enum):
+	def __init__(self, delta):
+		self.dx, self.dy = delta
+
+	def __neg__(self):
+		return Direction((-self.dx, -self.dy))
+	
+	def opposite(self):
+		return -self
+	
+	def right(self):
+		return Direction((-self.dy, self.dx))
+	
+	def left(self):
+		return Direction((self.dy, -self.dx))
+	
 	UP = (0, -1)
 	DOWN = (0, 1)
 	LEFT = (-1, 0)
 	RIGHT = (1, 0)
 
-	def __neg__(self):
-		return Direction((-self[0], -self[1]))
-	
-	def opposite(self):
-		return -self
-
 class Position(tuple):
-	def __new__(self, x, y):
-		return tuple.__new__(Position, (x, y))
+	def __new__(cls, x, y):
+		self = tuple.__new__(cls, (x, y))
+		self.x = x
+		self.y = y
+		return self
 
 	def __add__(self, direction: Direction):
-		return Position(self[0] + direction[0], self[1] + direction[1])
+		return Position(self.x + direction.dx, self.y + direction.dy)
 	
-	def get_tile(self, pipe_map):
-		return pipe_map[self[1]][self[0]]
+	def get_item(self, item_map):
+		if self.y in range(len(item_map)) and self.x in range(len(item_map[self.y])):
+			return item_map[self.y][self.x]
+		else:
+			return None
+	
+	def set_item(self, item_map, item):
+		if self.y in range(len(item_map)) and self.x in range(len(item_map[self.y])):
+			item_map[self.y][self.x] = item
 
 UP = Direction.UP
 DOWN = Direction.DOWN
@@ -42,15 +61,15 @@ def part1(filename):
 		if "S" in row:
 			start = Position(row.index("S"), y)
 			break
-	for direction in LEFT, RIGHT, UP, DOWN:
+	for direction in Direction:
 		neighbour = start + direction
-		tile = neighbour.get_tile(pipe_map)
-		if tile in pipes and -direction in pipes[tile]:
+		tile = neighbour.get_item(pipe_map)
+		if tile in pipes and direction.opposite() in pipes[tile]:
 			position = neighbour
 			break
 	length = 1
-	while (tile := position.get_tile(pipe_map)) != "S":
-		direction = pipes[tile][0] if pipes[tile][0] != -direction else pipes[tile][1]
+	while (tile := position.get_item(pipe_map)) != "S":
+		direction = pipes[tile][0] if pipes[tile][0] != direction.opposite() else pipes[tile][1]
 		position += direction
 		length += 1
 	print("Part 1: {}".format(length // 2))
@@ -68,80 +87,80 @@ def part2(filename):
 	open_set = set()
 	for y, row in enumerate(pipe_map):
 		for x in range(len(row)):
-			open_set.add((x, y))
+			open_set.add(Position(x, y))
 		if "S" in row:
-			start = (row.index("S"), y)
+			start = Position(row.index("S"), y)
 
 	start_dirs = []
-	for dx, dy in LEFT, RIGHT, UP, DOWN:
-		x, y = start
-		x += dx
-		y += dy
-		neighbour = pipe_map[y][x]
-		if neighbour in pipes and (-dx, -dy) in pipes[neighbour]:
-			start_dirs.append((dx, dy))
+	for direction in Direction:
+		neighbour = start + direction
+		tile = neighbour.get_item(pipe_map)
+		if tile in pipes and direction.opposite() in pipes[tile]:
+			start_dirs.append((direction))
 
 	x, y = start
-	loop_map[y][x] = "."
-	open_set.remove((x, y))
+	## We arbitrarily choose to move in the second direction out of the start tile
+	direction = start_dirs[1]
+	start.set_item(loop_map, ".")
+	open_set.remove(start)
 	right_turns = 0
 	left_turns = 0
-	## Find what type of pipe is at the starting tile
+	## Find what type of pipe is on the starting tile
 	for tile, (first_dir, second_dir) in pipes.items():
 		if start_dirs == [first_dir, second_dir] or start_dirs == [second_dir, first_dir]:
-			if (ny := y - dx) in y_span and (nx := x + dy) in x_span and loop_map[ny][nx] == " ": 
-				loop_map[ny][nx] = "L"
-				if (nx, ny) in open_set: open_set.remove((nx, ny))
-			if (ny := y + dx) in y_span and (nx := x - dy) in x_span and loop_map[ny][nx] == " ":
-				loop_map[ny][nx] = "R"
-				if (nx, ny) in open_set: open_set.remove((nx, ny))
+			if (left_side := start + direction.left()).get_item(loop_map) == " ":
+				left_side.set_item(loop_map, "L")
+				open_set.remove(left_side)
+			if (right_side := start + direction.right()).get_item(loop_map) == " ":
+				right_side.set_item(loop_map, "R")
+				open_set.remove(right_side)
 			if tile in "LJ7F":
-				## (dx, dy) is the exit direction, so the order of the pipe directions is (L, R)
-				if pipes[tile][1] == (dx, dy):
+				behind = start + direction.opposite()
+				## direction is the exit direction, so the order of the pipe directions is (L, R)
+				if pipes[tile][1] == direction:
 					right_turns += 1
-					if (ny := y - dy) in y_span and (nx := x - dx) in x_span and loop_map[ny][nx] == " ":
-						loop_map[ny][nx] = "L"
-						if (nx, ny) in open_set: open_set.remove((nx, ny))
+					if behind.get_item(loop_map) == " ":
+						behind.set_item(loop_map, "L")
+						open_set.remove(behind)
 				else:
 					left_turns += 1
-					if (ny := y - dy) in y_span and (nx := x - dx) in x_span and loop_map[ny][nx] == " ":
-						loop_map[ny][nx] = "R"
-						if (nx, ny) in open_set: open_set.remove((nx, ny))
-	x += dx
-	y += dy
-	while (tile := pipe_map[y][x]) != "S":
-		loop_map[y][x] = "."
-		if (x, y) in open_set: open_set.remove((x, y))
-		if (ny := y - dx) in y_span and (nx := x + dy) in x_span and loop_map[ny][nx] == " ": 
-			loop_map[ny][nx] = "L"
-			if (nx, ny) in open_set: open_set.remove((nx, ny))
-		if (ny := y + dx) in y_span and (nx := x - dy) in x_span and loop_map[ny][nx] == " ":
-			loop_map[ny][nx] = "R"
-			if (nx, ny) in open_set: open_set.remove((nx, ny))
+					if behind.get_item(loop_map) == " ":
+						behind.set_item(loop_map, "R")
+						open_set.remove(behind)
+	position = start + direction
+	while (tile := position.get_item(pipe_map)) != "S":
+		position.set_item(loop_map, ".")
+		if position in open_set: open_set.remove(position)
+		if (left_side := position + direction.left()).get_item(loop_map) == " ":
+			left_side.set_item(loop_map, "L")
+			open_set.remove(left_side)
+		if (right_side := position + direction.right()).get_item(loop_map) == " ":
+			right_side.set_item(loop_map, "R")
+			open_set.remove(right_side)
 		if tile in "LJ7F":
-			## (-dx, -dy) is the entrance direction, so the order of the pipe directions is (R, L)
-			if pipes[tile][0] == (-dx, -dy):
+			ahead = position + direction
+			## direction.opposite() is the entrance direction, so the order of the pipe directions is (R, L)
+			if pipes[tile][0] == direction.opposite():
 				right_turns += 1
-				if (ny := y + dy) in y_span and (nx := x + dx) in x_span and loop_map[ny][nx] == " ":
-					loop_map[ny][nx] = "L"
-					if (nx, ny) in open_set: open_set.remove((nx, ny))
+				if ahead.get_item(loop_map) == " ":
+					ahead.set_item(loop_map, "L")
+					open_set.remove(ahead)
 			else:
 				left_turns += 1
-				if (ny := y + dy) in y_span and (nx := x + dx) in x_span and loop_map[ny][nx] == " ":
-					loop_map[ny][nx] = "R"
-					if (nx, ny) in open_set: open_set.remove((nx, ny))
-		dx, dy = pipes[tile][0] if pipes[tile][0] != (-dx, -dy) else pipes[tile][1]
-		x += dx
-		y += dy
+				if ahead.get_item(loop_map) == " ":
+					ahead.set_item(loop_map, "R")
+					open_set.remove(ahead)
+		direction = pipes[tile][0] if pipes[tile][0] != direction.opposite() else pipes[tile][1]
+		position += direction
 	unresolved = collections.deque(open_set)
 	while len(unresolved):
-		x, y = unresolved.popleft()
-		if any(loop_map[ny][nx] == "R" for dx, dy in (LEFT, RIGHT, UP, DOWN) if (ny := y + dy) in y_span and (nx := x + dx) in x_span):
-			loop_map[y][x] = "R"
-		elif any(loop_map[ny][nx] == "L" for dx, dy in (LEFT, RIGHT, UP, DOWN) if (ny := y + dy) in y_span and (nx := x + dx) in x_span):
-			loop_map[y][x] = "L"
+		position = unresolved.popleft()
+		if any((position + direction).get_item(loop_map) == "R" for direction in Direction):
+			position.set_item(loop_map, "R")
+		elif any((position + direction).get_item(loop_map) == "L" for direction in Direction):
+			position.set_item(loop_map, "L")
 		else:
-			unresolved.append((x, y))
+			unresolved.append(position)
 	if right_turns > left_turns:
 		num_enclosed = sum(row.count("R") for row in loop_map)
 	else:
