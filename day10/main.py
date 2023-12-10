@@ -1,4 +1,5 @@
 import collections
+import enum
 import io
 import itertools
 import math
@@ -6,26 +7,51 @@ import os
 import re
 import sys
 
+class Direction(tuple, enum.Enum):
+	UP = (0, -1)
+	DOWN = (0, 1)
+	LEFT = (-1, 0)
+	RIGHT = (1, 0)
+
+	def __neg__(self):
+		return Direction((-self[0], -self[1]))
+	
+	def opposite(self):
+		return -self
+
+class Position(tuple):
+	def __new__(self, x, y):
+		return tuple.__new__(Position, (x, y))
+
+	def __add__(self, direction: Direction):
+		return Position(self[0] + direction[0], self[1] + direction[1])
+	
+	def get_tile(self, pipe_map):
+		return pipe_map[self[1]][self[0]]
+
+UP = Direction.UP
+DOWN = Direction.DOWN
+LEFT = Direction.LEFT
+RIGHT = Direction.RIGHT
+
 def part1(filename):
 	with io.open(filename, mode = 'r') as file:
 		pipe_map = [line.strip() for line in file]
-	pipes = {"|": ((0, -1), (0, 1)), "-": ((-1, 0), (1, 0)), "L": ((1, 0), (0, -1)), "J": ((-1, 0), (0, -1)), "7": ((-1, 0), (0, 1)), "F": ((1, 0), (0, 1))}
+	pipes = {"|": (UP, DOWN), "-": (LEFT, RIGHT), "L": (RIGHT, UP), "J": (LEFT, UP), "7": (LEFT, DOWN), "F": (RIGHT, DOWN)}
 	for y, row in enumerate(pipe_map):
 		if "S" in row:
-			start = (row.index("S"), y)
+			start = Position(row.index("S"), y)
 			break
-	for dx, dy in (-1, 0), (1, 0), (0, -1), (0, 1):
-		x, y = start
-		x += dx
-		y += dy
-		neighbour = pipe_map[y][x]
-		if neighbour in pipes and (-dx, -dy) in pipes[neighbour]:
+	for direction in LEFT, RIGHT, UP, DOWN:
+		neighbour = start + direction
+		tile = neighbour.get_tile(pipe_map)
+		if tile in pipes and -direction in pipes[tile]:
+			position = neighbour
 			break
 	length = 1
-	while (tile := pipe_map[y][x]) != "S":
-		dx, dy = pipes[tile][0] if pipes[tile][0] != (-dx, -dy) else pipes[tile][1]
-		x += dx
-		y += dy
+	while (tile := position.get_tile(pipe_map)) != "S":
+		direction = pipes[tile][0] if pipes[tile][0] != -direction else pipes[tile][1]
+		position += direction
 		length += 1
 	print("Part 1: {}".format(length // 2))
 
@@ -33,7 +59,7 @@ def part2(filename):
 	with io.open(filename, mode = 'r') as file:
 		pipe_map = [line.strip() for line in file if not line.isspace()]
 	## If you enter a turn from the first direction or exit from the second, you're turning right
-	pipes = {"|": ((0, -1), (0, 1)), "-": ((-1, 0), (1, 0)), "L": ((1, 0), (0, -1)), "J": ((0, -1), (-1, 0)), "7": ((-1, 0), (0, 1)), "F": ((0, 1), (1, 0))}
+	pipes = {"|": (UP, DOWN), "-": (LEFT, RIGHT), "L": (RIGHT, UP), "J": (UP, LEFT), "7": (LEFT, DOWN), "F": (DOWN, RIGHT)}
 	width = len(pipe_map[0])
 	height = len(pipe_map)
 	x_span = range(width)
@@ -47,7 +73,7 @@ def part2(filename):
 			start = (row.index("S"), y)
 
 	start_dirs = []
-	for dx, dy in (-1, 0), (1, 0), (0, -1), (0, 1):
+	for dx, dy in LEFT, RIGHT, UP, DOWN:
 		x, y = start
 		x += dx
 		y += dy
@@ -110,9 +136,9 @@ def part2(filename):
 	unresolved = collections.deque(open_set)
 	while len(unresolved):
 		x, y = unresolved.popleft()
-		if any(loop_map[ny][nx] == "R" for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)) if (ny := y + dy) in y_span and (nx := x + dx) in x_span):
+		if any(loop_map[ny][nx] == "R" for dx, dy in (LEFT, RIGHT, UP, DOWN) if (ny := y + dy) in y_span and (nx := x + dx) in x_span):
 			loop_map[y][x] = "R"
-		elif any(loop_map[ny][nx] == "L" for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)) if (ny := y + dy) in y_span and (nx := x + dx) in x_span):
+		elif any(loop_map[ny][nx] == "L" for dx, dy in (LEFT, RIGHT, UP, DOWN) if (ny := y + dy) in y_span and (nx := x + dx) in x_span):
 			loop_map[y][x] = "L"
 		else:
 			unresolved.append((x, y))
