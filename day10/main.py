@@ -32,9 +32,13 @@ def part1(filename):
 def part2(filename):
 	with io.open(filename, mode = 'r') as file:
 		pipe_map = [line.strip() for line in file if not line.isspace()]
-	# If you enter a turn from the first direction, you're turning right
+	## If you enter a turn from the first direction or exit from the second, you're turning right
 	pipes = {"|": ((0, -1), (0, 1)), "-": ((-1, 0), (1, 0)), "L": ((1, 0), (0, -1)), "J": ((0, -1), (-1, 0)), "7": ((-1, 0), (0, 1)), "F": ((0, 1), (1, 0))}
-	loop_map = [[" "] * len(row) for row in pipe_map]
+	width = len(pipe_map[0])
+	height = len(pipe_map)
+	x_span = range(width)
+	y_span = range(height)
+	loop_map = [[" "] * width for _ in pipe_map]
 	open_set = set()
 	for y, row in enumerate(pipe_map):
 		for x in range(len(row)):
@@ -56,56 +60,59 @@ def part2(filename):
 	open_set.remove((x, y))
 	right_turns = 0
 	left_turns = 0
+	## Find what type of pipe is at the starting tile
 	for tile, (first_dir, second_dir) in pipes.items():
 		if start_dirs == [first_dir, second_dir] or start_dirs == [second_dir, first_dir]:
-			if y - dx in range(len(loop_map)) and x + dy in range(len(loop_map[0])) and loop_map[y - dx][x + dy] == " ": 
-				loop_map[y - dx][x + dy] = "L"
-				if (x + dy, y - dx) in open_set: open_set.remove((x + dy, y - dx))
-			if y + dx in range(len(loop_map)) and x - dy in range(len(loop_map[0])) and loop_map[y + dx][x - dy] == " ":
-				loop_map[y + dx][x - dy] = "R"
-				if (x - dy, y + dx) in open_set: open_set.remove((x - dy, y + dx))
+			if (ny := y - dx) in y_span and (nx := x + dy) in x_span and loop_map[ny][nx] == " ": 
+				loop_map[ny][nx] = "L"
+				if (nx, ny) in open_set: open_set.remove((nx, ny))
+			if (ny := y + dx) in y_span and (nx := x - dy) in x_span and loop_map[ny][nx] == " ":
+				loop_map[ny][nx] = "R"
+				if (nx, ny) in open_set: open_set.remove((nx, ny))
 			if tile in "LJ7F":
+				## (dx, dy) is the exit direction, so the order of the pipe directions is (L, R)
 				if pipes[tile][1] == (dx, dy):
 					right_turns += 1
-					if y - dy in range(len(loop_map)) and x - dx in range(len(loop_map[0])) and loop_map[y - dy][x - dx] == " ":
-						loop_map[y - dy][x - dx] = "L"
-						if (x - dx, y - dy) in open_set: open_set.remove((x - dx, y - dy))
+					if (ny := y - dy) in y_span and (nx := x - dx) in x_span and loop_map[ny][nx] == " ":
+						loop_map[ny][nx] = "L"
+						if (nx, ny) in open_set: open_set.remove((nx, ny))
 				else:
 					left_turns += 1
-					if y - dy in range(len(loop_map)) and x - dx in range(len(loop_map[0])) and loop_map[y - dy][x - dx] == " ":
-						loop_map[y - dy][x - dx] = "R"
-						if (x - dx, y - dy) in open_set: open_set.remove((x - dx, y - dy))
+					if (ny := y - dy) in y_span and (nx := x - dx) in x_span and loop_map[ny][nx] == " ":
+						loop_map[ny][nx] = "R"
+						if (nx, ny) in open_set: open_set.remove((nx, ny))
 	x += dx
 	y += dy
 	while (tile := pipe_map[y][x]) != "S":
 		loop_map[y][x] = "."
 		if (x, y) in open_set: open_set.remove((x, y))
-		if y - dx in range(len(loop_map)) and x + dy in range(len(loop_map[0])) and loop_map[y - dx][x + dy] == " ": 
-			loop_map[y - dx][x + dy] = "L"
-			if (x + dy, y - dx) in open_set: open_set.remove((x + dy, y - dx))
-		if y + dx in range(len(loop_map)) and x - dy in range(len(loop_map[0])) and loop_map[y + dx][x - dy] == " ":
-			loop_map[y + dx][x - dy] = "R"
-			if (x - dy, y + dx) in open_set: open_set.remove((x - dy, y + dx))
+		if (ny := y - dx) in y_span and (nx := x + dy) in x_span and loop_map[ny][nx] == " ": 
+			loop_map[ny][nx] = "L"
+			if (nx, ny) in open_set: open_set.remove((nx, ny))
+		if (ny := y + dx) in y_span and (nx := x - dy) in x_span and loop_map[ny][nx] == " ":
+			loop_map[ny][nx] = "R"
+			if (nx, ny) in open_set: open_set.remove((nx, ny))
 		if tile in "LJ7F":
+			## (-dx, -dy) is the entrance direction, so the order of the pipe directions is (R, L)
 			if pipes[tile][0] == (-dx, -dy):
 				right_turns += 1
-				if y + dy in range(len(loop_map)) and x + dx in range(len(loop_map[0])) and loop_map[y + dy][x + dx] == " ":
-					loop_map[y + dy][x + dx] = "L"
-					if (x + dx, y + dy) in open_set: open_set.remove((x + dx, y + dy))
+				if (ny := y + dy) in y_span and (nx := x + dx) in x_span and loop_map[ny][nx] == " ":
+					loop_map[ny][nx] = "L"
+					if (nx, ny) in open_set: open_set.remove((nx, ny))
 			else:
 				left_turns += 1
-				if y + dy in range(len(loop_map)) and x + dx in range(len(loop_map[0])) and loop_map[y + dy][x + dx] == " ":
-					loop_map[y + dy][x + dx] = "R"
-					if (x + dx, y + dy) in open_set: open_set.remove((x + dx, y + dy))
+				if (ny := y + dy) in y_span and (nx := x + dx) in x_span and loop_map[ny][nx] == " ":
+					loop_map[ny][nx] = "R"
+					if (nx, ny) in open_set: open_set.remove((nx, ny))
 		dx, dy = pipes[tile][0] if pipes[tile][0] != (-dx, -dy) else pipes[tile][1]
 		x += dx
 		y += dy
 	unresolved = collections.deque(open_set)
 	while len(unresolved):
 		x, y = unresolved.popleft()
-		if any(loop_map[y + dy][x + dx] == "R" for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)) if y + dy in range(len(loop_map)) and x + dx in range(len(loop_map[0]))):
+		if any(loop_map[ny][nx] == "R" for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)) if (ny := y + dy) in y_span and (nx := x + dx) in x_span):
 			loop_map[y][x] = "R"
-		elif any(loop_map[y + dy][x + dx] == "L" for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)) if y + dy in range(len(loop_map)) and x + dx in range(len(loop_map[0]))):
+		elif any(loop_map[ny][nx] == "L" for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)) if (ny := y + dy) in y_span and (nx := x + dx) in x_span):
 			loop_map[y][x] = "L"
 		else:
 			unresolved.append((x, y))
