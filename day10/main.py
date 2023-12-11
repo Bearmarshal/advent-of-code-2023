@@ -53,10 +53,70 @@ DOWN = Direction.DOWN
 LEFT = Direction.LEFT
 RIGHT = Direction.RIGHT
 
+class EnumContainsValueMeta(enum.EnumMeta):
+	def __contains__(cls, value):
+		return value in cls.__members__.values()
+	
+class Bend(enum.Enum):
+	LEFT = enum.auto()
+	NONE = enum.auto()
+	RIGHT = enum.auto()
+
+class Pipe(enum.StrEnum, metaclass = EnumContainsValueMeta):
+	def __new__(cls, glyph: str, first_exit: Direction, second_exit: Direction, first_side: list, second_side: list):
+		obj = str.__new__(cls, glyph)
+		obj._value_ = glyph
+		obj.first_exit = first_exit
+		obj.second_exit = second_exit
+		obj.first_side = first_side # If you exit through the second exit, these are on the right side
+		obj.second_side = second_side
+		return obj
+	
+	@classmethod
+	def from_directions(cls, first_exit: Direction, second_exit: Direction):
+		for pipe in Pipe:
+			if pipe.first_exit in (first_exit, second_exit) and pipe.second_exit in (first_exit, second_exit):
+				return pipe
+
+	def is_enter_direction(self, direction: Direction):
+		return direction.opposite() in (self.first_exit, self.second_exit)
+
+	def get_exit_direction(self, enter_direction: Direction):
+		if enter_direction.opposite() != self.first_exit:
+			return self.first_exit
+		else:
+			return self.second_exit
+
+	def get_right_side(self, exit_direction: Direction):
+		if exit_direction == self.first_exit:
+			return self.second_side
+		else:
+			return self.first_side
+
+	def get_left_side(self, exit_direction: Direction):
+		if exit_direction == self.first_exit:
+			return self.first_side
+		else:
+			return self.second_side
+		
+	def get_bend(self, exit_direction: Direction):
+		if self in (Pipe.UP_DOWN, Pipe.LEFT_RIGHT):
+			return Bend.NONE
+		elif exit_direction == self.first_exit:
+			return Bend.LEFT
+		else:
+			return Bend.RIGHT
+
+	UP_DOWN = "|", UP, DOWN, [LEFT], [RIGHT]
+	LEFT_RIGHT = "-", LEFT, RIGHT, [DOWN], [UP]
+	RIGHT_UP = "L", RIGHT, UP, [], [LEFT, DOWN]
+	UP_LEFT = "J", UP, LEFT, [], [RIGHT, DOWN]
+	LEFT_DOWN = "7", LEFT, DOWN, [], [UP, RIGHT]
+	DOWN_RIGHT = "F", DOWN, RIGHT, [], [UP, LEFT]
+
 def part1(filename):
 	with io.open(filename, mode = 'r') as file:
 		pipe_map = [line.strip() for line in file]
-	pipes = {"|": (UP, DOWN), "-": (LEFT, RIGHT), "L": (RIGHT, UP), "J": (LEFT, UP), "7": (LEFT, DOWN), "F": (RIGHT, DOWN)}
 	for y, row in enumerate(pipe_map):
 		if "S" in row:
 			start = Position(row.index("S"), y)
@@ -64,12 +124,12 @@ def part1(filename):
 	for direction in Direction:
 		neighbour = start + direction
 		tile = neighbour.get_item(pipe_map)
-		if tile in pipes and direction.opposite() in pipes[tile]:
+		if tile in Pipe and Pipe(tile).is_enter_direction(direction):
 			position = neighbour
 			break
 	length = 1
 	while (tile := position.get_item(pipe_map)) != "S":
-		direction = pipes[tile][0] if pipes[tile][0] != direction.opposite() else pipes[tile][1]
+		direction = Pipe(tile).get_exit_direction(direction)
 		position += direction
 		length += 1
 	print("Part 1: {}".format(length // 2))
@@ -77,12 +137,7 @@ def part1(filename):
 def part2(filename):
 	with io.open(filename, mode = 'r') as file:
 		pipe_map = [line.strip() for line in file if not line.isspace()]
-	## If you enter a turn from the first direction or exit from the second, you're turning right
-	pipes = {"|": (UP, DOWN), "-": (LEFT, RIGHT), "L": (RIGHT, UP), "J": (UP, LEFT), "7": (LEFT, DOWN), "F": (DOWN, RIGHT)}
 	width = len(pipe_map[0])
-	height = len(pipe_map)
-	x_span = range(width)
-	y_span = range(height)
 	loop_map = [[" "] * width for _ in pipe_map]
 	open_set = set()
 	for y, row in enumerate(pipe_map):
@@ -91,66 +146,53 @@ def part2(filename):
 		if "S" in row:
 			start = Position(row.index("S"), y)
 
-	start_dirs = []
+	start_exits = []
 	for direction in Direction:
 		neighbour = start + direction
 		tile = neighbour.get_item(pipe_map)
-		if tile in pipes and direction.opposite() in pipes[tile]:
-			start_dirs.append((direction))
+		if tile in Pipe and Pipe(tile).is_enter_direction(direction):
+			start_exits.append(direction)
 
-	x, y = start
-	## We arbitrarily choose to move in the second direction out of the start tile
-	direction = start_dirs[1]
 	start.set_item(loop_map, ".")
 	open_set.remove(start)
 	right_turns = 0
 	left_turns = 0
 	## Find what type of pipe is on the starting tile
-	for tile, (first_dir, second_dir) in pipes.items():
-		if start_dirs == [first_dir, second_dir] or start_dirs == [second_dir, first_dir]:
-			if (left_side := start + direction.left()).get_item(loop_map) == " ":
-				left_side.set_item(loop_map, "L")
-				open_set.remove(left_side)
-			if (right_side := start + direction.right()).get_item(loop_map) == " ":
-				right_side.set_item(loop_map, "R")
-				open_set.remove(right_side)
-			if tile in "LJ7F":
-				behind = start + direction.opposite()
-				## direction is the exit direction, so the order of the pipe directions is (L, R)
-				if pipes[tile][1] == direction:
-					right_turns += 1
-					if behind.get_item(loop_map) == " ":
-						behind.set_item(loop_map, "L")
-						open_set.remove(behind)
-				else:
-					left_turns += 1
-					if behind.get_item(loop_map) == " ":
-						behind.set_item(loop_map, "R")
-						open_set.remove(behind)
+	start_pipe = Pipe.from_directions(*start_exits)
+	direction = start_pipe.first_exit
+	for left_direction in start_pipe.get_left_side(direction):
+		if (left_side := start + left_direction).get_item(loop_map) == " ":
+			left_side.set_item(loop_map, "L")
+			open_set.remove(left_side)
+	for right_direction in start_pipe.get_right_side(direction):
+		if (right_side := start + right_direction).get_item(loop_map) == " ":
+			right_side.set_item(loop_map, "R")
+			open_set.remove(right_side)
+	match(start_pipe.get_bend(direction)):
+		case Bend.RIGHT:
+			right_turns += 1
+		case Bend.LEFT:
+			left_turns += 1
 	position = start + direction
+
 	while (tile := position.get_item(pipe_map)) != "S":
 		position.set_item(loop_map, ".")
 		if position in open_set: open_set.remove(position)
-		if (left_side := position + direction.left()).get_item(loop_map) == " ":
-			left_side.set_item(loop_map, "L")
-			open_set.remove(left_side)
-		if (right_side := position + direction.right()).get_item(loop_map) == " ":
-			right_side.set_item(loop_map, "R")
-			open_set.remove(right_side)
-		if tile in "LJ7F":
-			ahead = position + direction
-			## direction.opposite() is the entrance direction, so the order of the pipe directions is (R, L)
-			if pipes[tile][0] == direction.opposite():
+		pipe = Pipe(tile)
+		direction = pipe.get_exit_direction(direction)
+		for left_direction in pipe.get_left_side(direction):
+			if (left_side := position + left_direction).get_item(loop_map) == " ":
+				left_side.set_item(loop_map, "L")
+				open_set.remove(left_side)
+		for right_direction in pipe.get_right_side(direction):
+			if (right_side := position + right_direction).get_item(loop_map) == " ":
+				right_side.set_item(loop_map, "R")
+				open_set.remove(right_side)
+		match(pipe.get_bend(direction)):
+			case Bend.RIGHT:
 				right_turns += 1
-				if ahead.get_item(loop_map) == " ":
-					ahead.set_item(loop_map, "L")
-					open_set.remove(ahead)
-			else:
+			case Bend.LEFT:
 				left_turns += 1
-				if ahead.get_item(loop_map) == " ":
-					ahead.set_item(loop_map, "R")
-					open_set.remove(ahead)
-		direction = pipes[tile][0] if pipes[tile][0] != direction.opposite() else pipes[tile][1]
 		position += direction
 	unresolved = collections.deque(open_set)
 	while len(unresolved):
