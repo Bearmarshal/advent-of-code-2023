@@ -25,8 +25,6 @@ def perform_spin_cycle(platform):
 	for _ in range(4):
 		platform_rotated = list("".join(glyphs) for glyphs in zip(*reversed(platform)))
 		platform = tilt_east_west(platform_rotated, tilt_west=False)
-		# print("\n".join(platform))
-		# print()
 	return platform
 
 def part1(filename):
