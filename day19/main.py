@@ -27,46 +27,83 @@ class Part:
 	
 	def __repr__(self):
 		return "{x=" + str(self.x) + ",m=" + str(self.m) + ",a=" + str(self.a) + ",s=" + str(self.s) + "}"
-
-def compare_attribute_to(attribute, operator, value, part):
-	if operator == "<":
-		return part.__dict__[attribute] < value
-	else:
-		return part.__dict__[attribute] > value
+	
+class PartRange(Part):
+	def split(self, attribute, threshold):
+		match attribute:
+			case "x":
+				return PartRange((self.x[0], threshold - 1), self.m, self.a, self.s), PartRange((threshold, self.x[1]), self.m, self.a, self.s)
+			case "m":
+				return PartRange(self.x, (self.m[0], threshold - 1), self.a, self.s), PartRange(self.x, (threshold, self.m[1]), self.a, self.s)
+			case "a":
+				return PartRange(self.x, self.m, (self.a[0], threshold - 1), self.s), PartRange(self.x, self.m, (threshold, self.a[1]), self.s)
+			case "s":
+				return PartRange(self.x, self.m, self.a, (self.s[0], threshold - 1)), PartRange(self.x, self.m, self.a, (threshold, self.s[1]))
+			
+	def count_parts(self):
+		return max(0, self.x[1] - self.x[0] + 1) * max(0, self.m[1] - self.m[0] + 1) * max(0, self.a[1] - self.a[0] + 1) * max(0, self.s[1] - self.s[0] + 1)
+	
+	def __repr__(self):
+		return "{" + f"x={self.x[0]}..{self.x[1]},m={self.m[0]}..{self.m[1]},a={self.a[0]}..{self.a[1]},s={self.s[0]}..{self.s[1]}" + "}"
 
 class Workflow:
 	def __init__(self, name, rules):
 		self.name = name
-		self.rules = []
-		for rule in rules:
-			if comparison_match := re.match(r"(?P<attribute>\w+)(?P<operator>[<>])(?P<value>\d+):(?P<action>\w+)", rule):
+		self.rules = rules
+
+	def process(self, part, workflows):
+		for rule in self.rules:
+			if comparison_match := re.match(r"(?P<attribute>\w+)(?P<operator>[<>])(?P<threshold>\d+):(?P<action>\w+)", rule):
 				attribute = comparison_match["attribute"]
 				operator = comparison_match["operator"]
-				value = int(comparison_match["value"])
-				matcher = functools.partial(compare_attribute_to, attribute, operator, value)
-				match comparison_match["action"]:
-					case "A":
-						action = lambda part, workflows: True
-					case "R":
-						action = lambda part, workflows: False
-					case workflow:
-						action = functools.partial(lambda part, workflows, w: workflows[w].process(part, workflows), w=workflow)
-				self.rules.append((matcher, action))
+				threshold = int(comparison_match["threshold"])
+				value = part.__dict__[attribute]
+				matches = value < threshold if operator == "<" else value > threshold
+				if matches:
+					match comparison_match["action"]:
+						case "A":
+							return True
+						case "R":
+							return False
+						case workflow:
+							return workflows[workflow].process(part, workflows)
 			else:
 				match rule:
 					case "A":
-						self.default = lambda part, workflows: True
+						return True
 					case "R":
-						self.default = lambda part, workflows: False
+						return False
 					case workflow:
-						self.default = functools.partial(lambda part, workflows, w: workflows[w].process(part, workflows), w=workflow)
-
-	def process(self, part, workflows):
-		for matcher, action in self.rules:
-			if matcher(part):
-				return action(part, workflows)
-		else:
-			return self.default(part, workflows)
+						return workflows[workflow].process(part, workflows)
+					
+	def preprocess(self, part_range, workflows):
+		accepted_ranges = []
+		for rule in self.rules:
+			if not part_range.count_parts():
+				break
+			if comparison_match := re.match(r"(?P<attribute>\w+)(?P<operator>[<>])(?P<threshold>\d+):(?P<action>\w+)", rule):
+				attribute = comparison_match["attribute"]
+				operator = comparison_match["operator"]
+				threshold = int(comparison_match["threshold"]) + (1 if operator == ">" else 0)
+				under, over = part_range.split(attribute, threshold)
+				selected, part_range = (under, over) if operator == "<" else (over, under)
+				if selected.count_parts():
+					match comparison_match["action"]:
+						case "A":
+							accepted_ranges.append(selected)
+						case "R":
+							pass
+						case workflow:
+							accepted_ranges += workflows[workflow].preprocess(selected, workflows)
+			else:
+				match rule:
+					case "A":
+						accepted_ranges.append(part_range)
+					case "R":
+						pass
+					case workflow:
+						accepted_ranges += workflows[workflow].preprocess(part_range, workflows)
+		return accepted_ranges
 		
 	def __repr__(self):
 		return self.name
@@ -82,8 +119,12 @@ def part1(filename):
 
 def part2(filename):
 	with io.open(filename, mode = 'r') as file:
-		steps = file.read().replace("\n", "").split(",")
-	print("Part 2: {}".format(2))
+		workflows_input, parts_input = file.read().strip().split("\n\n")
+	workflows = {name: Workflow(name, rules.split(",")) for name, rules in re.findall(r"(\w+)\{([^}]+)\}", workflows_input)}
+	workflow_in = workflows["in"]
+	allpart = PartRange((1, 4000), (1, 4000), (1, 4000), (1, 4000))
+	accepted_part_ranges = [part_range for part_range in workflow_in.preprocess(allpart, workflows)]
+	print("Part 2: {}".format(sum(part_range.count_parts() for part_range in accepted_part_ranges)))
 
 if __name__ == "__main__":
 	if len(sys.argv) > 1:
@@ -91,4 +132,4 @@ if __name__ == "__main__":
 	else:
 		filename = os.path.dirname(sys.argv[0]) + "/input.txt"
 	part1(filename)
-	# part2(filename)
+	part2(filename)
